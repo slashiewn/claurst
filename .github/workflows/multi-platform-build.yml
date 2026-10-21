@@ -1,0 +1,152 @@
+name: Multi-platform build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-build:
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        working-directory: src-rust
+        run: cargo build --release --locked -p claurst
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp src-rust/target/release/claurst dist/claurst-linux-x86_64
+          tar -czf dist/claurst-linux-x86_64.tar.gz -C dist claurst-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claurst-linux-x86_64
+          path: dist/claurst-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows-build:
+    name: Windows x86_64
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        working-directory: src-rust
+        run: cargo build --release --locked -p claurst
+
+      - name: Package
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "src-rust\target\release\claurst.exe" "dist\claurst-windows-x86_64.exe"
+          Compress-Archive -Path "dist\claurst-windows-x86_64.exe" -DestinationPath "dist\claurst-windows-x86_64.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claurst-windows-x86_64
+          path: dist/claurst-windows-x86_64.zip
+          if-no-files-found: error
+
+  macos-build:
+    name: macOS x86_64
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        working-directory: src-rust
+        run: cargo build --release --locked -p claurst
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp src-rust/target/release/claurst dist/claurst-macos-x86_64
+          tar -czf dist/claurst-macos-x86_64.tar.gz -C dist claurst-macos-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claurst-macos-x86_64
+          path: dist/claurst-macos-x86_64.tar.gz
+          if-no-files-found: error
+
+  android-arm64-build:
+    name: Android ARM64
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "ndk;26.3.11579264"
+
+      - name: Export NDK environment
+        shell: bash
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "CC_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
+
+      - name: Build Android ARM64 binary
+        working-directory: src-rust
+        shell: bash
+        run: cargo build --release --locked --target aarch64-linux-android -p claurst
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp src-rust/target/aarch64-linux-android/release/claurst dist/claurst-android-aarch64
+          tar -czf dist/claurst-android-aarch64.tar.gz -C dist claurst-android-aarch64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claurst-android-aarch64
+          path: dist/claurst-android-aarch64.tar.gz
+          if-no-files-found: error
